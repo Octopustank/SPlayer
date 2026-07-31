@@ -6,6 +6,20 @@
 >
 > 新功能及后续版本请移步 [SPlayer-Next](https://github.com/SPlayer-Dev/SPlayer-Next)
 
+> [!IMPORTANT]
+>
+> # 本分支为个人维护版（Octopustank fork）
+>
+> 基于上游 dev 分支的个人维护，包含以下私有改动（原仓库已归档，不合并回上游）：
+>
+> - **歌词高亮修复**：ESLyric/逐字解析器的 1000ms 兜底不再覆盖 LDDC 尾部时间戳给出的正确 endTime，解决逐字歌词"只亮 1 秒就熄灭"问题（`src/utils/lyric/lyricParser.ts`）
+> - **版本号**：3.1.1 → 3.1.2（私有 patch 版本）
+> - **Flatpak 构建管线**（`flatpak` 分支）：
+>   - `com.imsyy.SPlayer.yml`：freedesktop SDK 25.08 构建，修复沙盒内在线内容 404（`VITE_API_URL`）与托盘图标空白（`--filesystem=/tmp` 共享 Chromium 图标文件）
+>   - `electron-builder-flatpak.ts`：仅产出 unpacked 目录的打包配置
+>   - 构建：`flatpak-builder --force-clean --user --install build-dir com.imsyy.SPlayer.yml`
+
+
 <div align="center">
 <img alt="logo" height="100" width="100" src="public/icons/favicon.png" />
 <h2> SPlayer </h2>
