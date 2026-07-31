@@ -1,0 +1,131 @@
+# Flatpak manifest for SPlayer
+# 
+# How to build:
+# 1. Install SDK: flatpak install flathub org.freedesktop.Sdk//25.08
+# 2. Build: flatpak-builder --force-clean --user build-dir com.imsyy.SPlayer.yml
+# 3. Install: flatpak-builder --force-clean --user --install build-dir com.imsyy.SPlayer.yml
+# 4. Run: flatpak run com.imsyy.SPlayer
+# 5. Clean: flatpak uninstall com.imsyy.SPlayer && rm -rf build-dir .flatpak-builder
+
+id: com.imsyy.SPlayer
+runtime: org.freedesktop.Platform
+runtime-version: '25.08'
+sdk: org.freedesktop.Sdk
+sdk-extensions:
+  - org.freedesktop.Sdk.Extension.node22
+  - org.freedesktop.Sdk.Extension.rust-stable
+
+command: run.sh
+
+finish-args:
+  # Display server
+  - --socket=x11
+  - --socket=wayland
+  # Audio
+  - --socket=pulseaudio
+  # Network for music streaming
+  - --share=network
+  # GPU acceleration
+  - --device=dri
+  # File access
+  - --filesystem=home
+  - --filesystem=xdg-music
+  # Share /tmp so GNOME's SNI host can read Chromium's status icon files
+  - --filesystem=/tmp
+  # Notifications
+  - --talk-name=org.freedesktop.Notifications
+  # DNS resolution and network services
+  - --system-talk-name=org.freedesktop.resolve1
+  - --talk-name=org.freedesktop.NetworkManager
+  - --talk-name=org.freedesktop.login1
+  # Tray icon (StatusNotifierItem protocol)
+  - --talk-name=org.kde.StatusNotifierWatcher
+  - --talk-name=com.canonical.indicator.application
+  - --talk-name=org.ayatana.indicator.application
+  # Allow all system bus access
+  - --socket=session-bus
+  - --socket=system-bus
+
+modules:
+  - name: SPlayer
+    buildsystem: simple
+    build-options:
+      append-path: /usr/lib/sdk/node22/bin:/usr/lib/sdk/rust-stable/bin
+      env:
+        # Tell pnpm we're in CI to allow node_modules removal without TTY
+        CI: 'true'
+        # Chinese npm mirror
+        NPM_CONFIG_REGISTRY: 'https://registry.npmmirror.com'
+        # Skip electron binary download
+        ELECTRON_SKIP_BINARY_DOWNLOAD: '1'
+        NPM_CONFIG_STRICT_SSL: 'false'
+        # API URL for production build
+        VITE_API_URL: '/api/netease'
+      # Network during build
+      build-args:
+        - --share=network
+    build-commands:
+      # Complete build script
+      - |
+        set -e
+        
+        echo "=== Step 1: Installing pnpm ==="
+        npm install --prefix=/var/tmp pnpm@10
+        export PATH="/var/tmp/node_modules/.bin:$PATH"
+        
+        echo "=== Step 2: Installing dependencies ==="
+        pnpm install --frozen-lockfile
+        
+        echo "=== Step 2b: Rebuilding native modules for Electron ==="
+        npx electron-builder install-app-deps
+        
+        echo "=== Step 3: Building Rust native modules ==="
+        pnpm build:native
+        
+        echo "=== Step 4: Building Electron app (Vite) ==="
+        npx electron-vite build
+        
+        echo "=== Step 5: Packaging with electron-builder ==="
+        npx electron-builder --linux --config electron-builder-flatpak.ts
+        
+        echo "=== Step 6: Installing to Flatpak structure ==="
+        install -d /app/share/SPlayer
+        install -d /app/bin
+        install -d /app/share/applications
+        install -d /app/share/icons/hicolor/512x512/apps
+        
+        # Copy built application
+        cp -r dist/linux-unpacked/* /app/share/SPlayer/
+        
+        # Desktop entry
+        cat > /app/share/applications/com.imsyy.SPlayer.desktop << 'DESKTOP'
+        [Desktop Entry]
+        Name=SPlayer
+        Comment=A minimalist music player
+        Exec=run.sh %U
+        Icon=com.imsyy.SPlayer
+        Type=Application
+        Categories=Audio;Music;Player;AudioVideo;
+        MimeType=x-scheme-handler/orpheus;
+        StartupNotify=true
+        DESKTOP
+        
+        # Icon
+        install -Dm644 public/icons/favicon-512x512.png /app/share/icons/hicolor/512x512/apps/com.imsyy.SPlayer.png
+        
+        # Launcher script (disable SUID sandbox for Flatpak)
+        cat > /app/bin/run.sh << 'LAUNCHER'
+        #!/bin/bash
+        exec /app/share/SPlayer/SPlayer --no-sandbox --enable-features=StatusTrayIcon "$@"
+        LAUNCHER
+        chmod +x /app/bin/run.sh
+        
+        echo "=== Build Complete ==="
+
+    sources:
+      # Application source
+      - type: dir
+        path: .
+      # Custom electron-builder config
+      - type: file
+        path: electron-builder-flatpak.ts

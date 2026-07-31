@@ -40,3 +40,9 @@ docs/.vitepress/dist
 .trae/*
 .cursor/*
 .claude/*
+.qwen/*
+
+# Flatpak build artifacts
+localrepo/
+build-dir/
+.flatpak-builder/
