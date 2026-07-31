@@ -1,0 +1,105 @@
+name: Build Linux packages (private fork)
+
+# 私有 fork 专用：构建 Linux 原生包 + Flatpak bundle
+# 上游 release.yml 保留原样（6 平台发布），本 workflow 只做私有维护所需的产物
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'pkg-*'
+
+jobs:
+  linux-packages:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.28.1
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Create .env (production API config)
+        run: |
+          echo 'VITE_API_URL=/api/netease' > .env
+          echo 'VITE_SERVER_PORT=25884' >> .env
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build native modules
+        run: pnpm build:native
+
+      - name: Build app
+        run: pnpm build
+
+      - name: Package rpm / deb / AppImage
+        run: npx electron-builder --linux rpm deb AppImage --config electron-builder.config.ts --publish never
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-packages
+          path: |
+            dist/*.rpm
+            dist/*.deb
+            dist/*.AppImage
+          if-no-files-found: error
+
+  flatpak:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install flatpak tooling
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y flatpak flatpak-builder
+
+      - name: Add flathub remote
+        run: flatpak remote-add --user --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
+
+      - name: Install SDK 25.08 + extensions
+        run: |
+          flatpak install --user -y --noninteractive flathub org.freedesktop.Platform//25.08
+          flatpak install --user -y --noninteractive flathub org.freedesktop.Sdk//25.08
+          flatpak install --user -y --noninteractive flathub org.freedesktop.Sdk.Extension.node22//25.08
+          flatpak install --user -y --noninteractive flathub org.freedesktop.Sdk.Extension.rust-stable//25.08
+
+      - name: Build flatpak
+        run: flatpak-builder --force-clean --user --repo=repo build-dir com.imsyy.SPlayer.yml
+
+      - name: Create flatpak bundle
+        run: flatpak build-bundle repo splayer-3.1.2-x86_64.flatpak com.imsyy.SPlayer
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: flatpak
+          path: splayer-*.flatpak
+          if-no-files-found: error
+
+  release:
+    needs: [linux-packages, flatpak]
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Upload packages to GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            artifacts/linux-packages/*.rpm
+            artifacts/linux-packages/*.deb
+            artifacts/linux-packages/*.AppImage
+            artifacts/flatpak/*.flatpak
