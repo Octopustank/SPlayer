@@ -125,8 +125,8 @@ export const parseWordByWordLrc = (content: string): LyricLine[] => {
       }
     }
 
-    // 处理行内最后一个字
-    if (prevWord) {
+    // 处理行内最后一个字 — 仅当末字未从后续时间戳获得 endTime 时才兜底
+    if (prevWord && prevWord.endTime === prevWord.startTime) {
       prevWord.endTime = prevWord.startTime + DEFAULT_WORD_DURATION;
     }
 
@@ -194,7 +194,8 @@ export const parseEnhancedLrc = (content: string): LyricLine[] => {
         }
       }
 
-      if (prevWord) {
+      // 仅当末字未从后续时间戳获得 endTime 时才兜底
+      if (prevWord && prevWord.endTime === prevWord.startTime) {
         prevWord.endTime = prevWord.startTime + DEFAULT_WORD_DURATION; // 默认兜底
       }
     } else {
