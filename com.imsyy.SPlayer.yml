@@ -28,7 +28,10 @@ finish-args:
   # GPU acceleration
   - --device=dri
   # File access
-  - --filesystem=home
+  # 不授予 --filesystem=home：授予后沙箱内的 $HOME 指向真实家目录，应用及其
+  # 子进程可以读写整个用户目录。配置与缓存本来就被 XDG_CONFIG_HOME、
+  # XDG_CACHE_HOME 重定向到 ~/.var/app/com.imsyy.SPlayer 下，不需要 home 访问；
+  # 本地曲库依赖 xdg-music，其它位置通过文件选择器的 portal 授权。
   - --filesystem=xdg-music
   # Share /tmp so GNOME's SNI host can read Chromium's status icon files
   - --filesystem=/tmp
